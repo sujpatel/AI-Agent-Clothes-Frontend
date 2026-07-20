@@ -1,112 +1,228 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import { EditItemModal } from '@/components/edit-item-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { Collapsible } from '@/components/ui/collapsible';
+import { API_BASE_URL } from '@/config/api';
+import { useWardrobe, WardrobeItem } from '@/context/wardrobe-context';
 
-export default function TabTwoScreen() {
+const CATEGORIES = ['top', 'bottom', 'shoes', 'outerwear', 'accessory'];
+
+export default function GalleryScreen() {
+  const { items, loading, error, fetchItems, addToLaundry, updateItem, deleteItem } = useWardrobe();
+  const [refreshing, setRefreshing] = useState(false);
+  const [editingItem, setEditingItem] = useState<WardrobeItem | null>(null);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchItems();
+    setRefreshing(false);
+  }, [fetchItems]);
+
+  const confirmDelete = useCallback(
+    (item: WardrobeItem) => {
+      Alert.alert('Delete this item?', 'This removes it from your wardrobe permanently.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteItem(item.id) },
+      ]);
+    },
+    [deleteItem]
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
+    <ThemedView style={styles.container} lightColor="#F4EFE6" darkColor="#17150F">
+      <SafeAreaView style={styles.safeArea}>
+        <ThemedView style={styles.header} lightColor="#F4EFE6" darkColor="#17150F">
+          <ThemedText style={styles.h1}>Wardrobe</ThemedText>
+          <ThemedText style={styles.count} lightColor="#8B8477" darkColor="#9A9282">
+            {items.length} items
+          </ThemedText>
+        </ThemedView>
+
+        {loading && <ActivityIndicator size="large" style={styles.spacing} />}
+
+        {error && !loading && (
+          <ThemedView style={styles.errorRow} lightColor="#F4EFE6" darkColor="#17150F">
+            <ThemedText lightColor="#8B8477" darkColor="#9A9282">
+              {error}
             </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+            <Pressable style={styles.retryButton} onPress={fetchItems}>
+              <ThemedText type="defaultSemiBold" style={styles.retryText}>
+                Retry
+              </ThemedText>
+            </Pressable>
+          </ThemedView>
+        )}
+
+        {!loading && !error && (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
+            {CATEGORIES.map((category) => {
+              const categoryItems = items.filter((item) => item.category === category);
+              return (
+                <Collapsible key={category} title={`${category} · ${categoryItems.length}`}>
+                  {categoryItems.length === 0 ? (
+                    <ThemedText lightColor="#8B8477" darkColor="#9A9282">
+                      No items yet.
+                    </ThemedText>
+                  ) : (
+                    <View style={styles.grid}>
+                      {categoryItems.map((item) => {
+                        const inLaundry = item.available === false;
+                        return (
+                          <ThemedView key={item.id} style={styles.card} lightColor="#FFFFFF" darkColor="#221F17">
+                            <Pressable
+                              onPress={() => !inLaundry && addToLaundry(item.id)}
+                              disabled={inLaundry}>
+                              <ThemedView style={styles.swatch} lightColor="#F4EFE6" darkColor="#17150F">
+                                <Image
+                                  source={{ uri: `${API_BASE_URL}/photos/${item.id}` }}
+                                  style={styles.photo}
+                                  contentFit="cover"
+                                />
+                                <Pressable style={[styles.iconBtn, styles.editBtn]} onPress={() => setEditingItem(item)}>
+                                  <IconSymbol name="pencil" size={13} color="#fff" />
+                                </Pressable>
+                                <Pressable style={[styles.iconBtn, styles.delBtn]} onPress={() => confirmDelete(item)}>
+                                  <IconSymbol name="trash" size={13} color="#fff" />
+                                </Pressable>
+                              </ThemedView>
+                            </Pressable>
+                            <ThemedText style={styles.meta}>
+                              {item.color} · {item.pattern}
+                            </ThemedText>
+                            {inLaundry ? (
+                              <ThemedText style={styles.laundryTag} lightColor="#C05A2E" darkColor="#D97E51">
+                                In laundry
+                              </ThemedText>
+                            ) : (
+                              <ThemedText style={styles.addHint} lightColor="#8B8477" darkColor="#9A9282">
+                                Tap to send to laundry
+                              </ThemedText>
+                            )}
+                          </ThemedView>
+                        );
+                      })}
+                    </View>
+                  )}
+                </Collapsible>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        <EditItemModal
+          item={editingItem}
+          visible={editingItem !== null}
+          onClose={() => setEditingItem(null)}
+          onSave={updateItem}
+        />
+      </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
   },
-  titleContainer: {
+  safeArea: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  header: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 14,
+  },
+  h1: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  count: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  spacing: {
+    marginTop: 24,
+  },
+  errorRow: {
+    marginTop: 24,
+    alignItems: 'center',
+    gap: 10,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 100,
+    backgroundColor: '#C05A2E',
+  },
+  retryText: {
+    color: '#F4EFE6',
+  },
+  scrollContent: {
+    gap: 14,
+    paddingBottom: 32,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingTop: 4,
+  },
+  card: {
+    width: '47%',
+    borderRadius: 18,
+    padding: 10,
+    gap: 4,
+  },
+  swatch: {
+    position: 'relative',
+    borderRadius: 13,
+    overflow: 'hidden',
+  },
+  photo: {
+    width: '100%',
+    aspectRatio: 1.1,
+  },
+  meta: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  laundryTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  addHint: {
+    fontSize: 10,
+  },
+  iconBtn: {
+    position: 'absolute',
+    top: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editBtn: {
+    left: 7,
+    backgroundColor: 'rgba(23,21,15,0.55)',
+  },
+  delBtn: {
+    right: 7,
+    backgroundColor: '#C05A2E',
   },
 });
