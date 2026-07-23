@@ -5,25 +5,33 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#C05A2E';
-const tintColorDark = '#D97E51';
+// Fully monochrome — the accent is just ink/paper. Tags, active states, and
+// chevrons read as high-contrast ink rather than a color.
+const threadLight = '#17140F';
+const threadDark = '#EDEAE2';
 
 export const Colors = {
   light: {
-    text: '#17150F',
-    background: '#F4EFE6',
-    tint: tintColorLight,
-    icon: '#8B8477',
-    tabIconDefault: '#8B8477',
-    tabIconSelected: tintColorLight,
+    text: '#17140F',
+    background: '#F7F5F0',
+    card: '#FFFFFF',
+    line: '#E3DFD3',
+    muted: '#8A8478',
+    tint: threadLight,
+    icon: '#8A8478',
+    tabIconDefault: '#8A8478',
+    tabIconSelected: '#17140F',
   },
   dark: {
-    text: '#F0EBDF',
-    background: '#17150F',
-    tint: tintColorDark,
-    icon: '#9A9282',
-    tabIconDefault: '#9A9282',
-    tabIconSelected: tintColorDark,
+    text: '#EDEAE2',
+    background: '#121110',
+    card: '#1C1A17',
+    line: '#2B2822',
+    muted: '#948C7E',
+    tint: threadDark,
+    icon: '#948C7E',
+    tabIconDefault: '#948C7E',
+    tabIconSelected: '#EDEAE2',
   },
 };
 

@@ -1,22 +1,31 @@
-import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EditItemModal } from '@/components/edit-item-modal';
+import { LoadablePhoto } from '@/components/loadable-photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Collapsible } from '@/components/ui/collapsible';
 import { API_BASE_URL } from '@/config/api';
+import { Fonts } from '@/constants/theme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { useWardrobe, WardrobeItem } from '@/context/wardrobe-context';
 
 const CATEGORIES = ['top', 'bottom', 'shoes', 'outerwear', 'accessory'];
+const FILTERS = ['all', ...CATEGORIES];
 
 export default function GalleryScreen() {
   const { items, loading, error, fetchItems, addToLaundry, updateItem, deleteItem } = useWardrobe();
   const [refreshing, setRefreshing] = useState(false);
   const [editingItem, setEditingItem] = useState<WardrobeItem | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState('all');
+
+  const textColor = useThemeColor({}, 'text');
+  const bgColor = useThemeColor({}, 'background');
+  const lineColor = useThemeColor({}, 'line');
+  const mutedColor = useThemeColor({}, 'muted');
+  const accentColor = useThemeColor({}, 'tint');
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -35,86 +44,95 @@ export default function GalleryScreen() {
   );
 
   return (
-    <ThemedView style={styles.container} lightColor="#F4EFE6" darkColor="#17150F">
+    <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.header} lightColor="#F4EFE6" darkColor="#17150F">
+        <ThemedView style={styles.masthead}>
+          <ThemedText style={[styles.eyebrow, { color: mutedColor }]}>{items.length} PIECES</ThemedText>
           <ThemedText style={styles.h1}>Wardrobe</ThemedText>
-          <ThemedText style={styles.count} lightColor="#8B8477" darkColor="#9A9282">
-            {items.length} items
-          </ThemedText>
+          <ThemedView style={[styles.rule, { backgroundColor: lineColor }]} />
         </ThemedView>
 
         {loading && <ActivityIndicator size="large" style={styles.spacing} />}
 
         {error && !loading && (
-          <ThemedView style={styles.errorRow} lightColor="#F4EFE6" darkColor="#17150F">
-            <ThemedText lightColor="#8B8477" darkColor="#9A9282">
-              {error}
-            </ThemedText>
-            <Pressable style={styles.retryButton} onPress={fetchItems}>
-              <ThemedText type="defaultSemiBold" style={styles.retryText}>
-                Retry
-              </ThemedText>
+          <ThemedView style={styles.errorRow}>
+            <ThemedText style={{ color: mutedColor }}>{error}</ThemedText>
+            <Pressable style={[styles.button, styles.errorButton, { backgroundColor: textColor }]} onPress={fetchItems}>
+              <ThemedText style={[styles.buttonText, { color: bgColor }]}>RETRY</ThemedText>
             </Pressable>
           </ThemedView>
         )}
 
         {!loading && !error && (
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
-            {CATEGORIES.map((category) => {
-              const categoryItems = items.filter((item) => item.category === category);
-              return (
-                <Collapsible key={category} title={`${category} · ${categoryItems.length}`}>
-                  {categoryItems.length === 0 ? (
-                    <ThemedText lightColor="#8B8477" darkColor="#9A9282">
-                      No items yet.
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterScroll}
+              contentContainerStyle={styles.filterRow}>
+              {FILTERS.map((filter) => {
+                const count = filter === 'all' ? items.length : items.filter((item) => item.category === filter).length;
+                const active = selectedFilter === filter;
+                return (
+                  <Pressable
+                    key={filter}
+                    style={[styles.tab, active && { borderBottomColor: accentColor }]}
+                    onPress={() => setSelectedFilter(filter)}>
+                    <ThemedText style={[styles.tabText, { color: active ? textColor : mutedColor }]}>
+                      {filter.toUpperCase()}
                     </ThemedText>
-                  ) : (
-                    <View style={styles.grid}>
-                      {categoryItems.map((item) => {
-                        const inLaundry = item.available === false;
-                        return (
-                          <ThemedView key={item.id} style={styles.card} lightColor="#FFFFFF" darkColor="#221F17">
-                            <Pressable
-                              onPress={() => !inLaundry && addToLaundry(item.id)}
-                              disabled={inLaundry}>
-                              <ThemedView style={styles.swatch} lightColor="#F4EFE6" darkColor="#17150F">
-                                <Image
-                                  source={{ uri: `${API_BASE_URL}/photos/${item.id}` }}
-                                  style={styles.photo}
-                                  contentFit="cover"
-                                />
-                                <Pressable style={[styles.iconBtn, styles.editBtn]} onPress={() => setEditingItem(item)}>
-                                  <IconSymbol name="pencil" size={13} color="#fff" />
-                                </Pressable>
-                                <Pressable style={[styles.iconBtn, styles.delBtn]} onPress={() => confirmDelete(item)}>
-                                  <IconSymbol name="trash" size={13} color="#fff" />
-                                </Pressable>
-                              </ThemedView>
-                            </Pressable>
-                            <ThemedText style={styles.meta}>
-                              {item.color} · {item.pattern}
-                            </ThemedText>
-                            {inLaundry ? (
-                              <ThemedText style={styles.laundryTag} lightColor="#C05A2E" darkColor="#D97E51">
-                                In laundry
-                              </ThemedText>
-                            ) : (
-                              <ThemedText style={styles.addHint} lightColor="#8B8477" darkColor="#9A9282">
-                                Tap to send to laundry
-                              </ThemedText>
-                            )}
-                          </ThemedView>
-                        );
-                      })}
-                    </View>
-                  )}
-                </Collapsible>
-              );
-            })}
-          </ScrollView>
+                    <ThemedText style={[styles.tabCount, { color: active ? accentColor : mutedColor }]}>
+                      {count}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <ScrollView
+              style={styles.gridScroll}
+              contentContainerStyle={styles.scrollContent}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
+              {(() => {
+                const filteredItems =
+                  selectedFilter === 'all' ? items : items.filter((item) => item.category === selectedFilter);
+
+                if (filteredItems.length === 0) {
+                  return (
+                    <ThemedText style={[styles.emptyNote, { color: mutedColor }]}>
+                      Nothing here yet.
+                    </ThemedText>
+                  );
+                }
+
+                return (
+                  <View style={styles.grid}>
+                    {filteredItems.map((item) => {
+                      const inLaundry = item.available === false;
+                      return (
+                        <ThemedView key={item.id} style={styles.card}>
+                          <Pressable onPress={() => !inLaundry && addToLaundry(item.id)} disabled={inLaundry}>
+                            <ThemedView style={[styles.swatch, { backgroundColor: bgColor, borderColor: lineColor }]}>
+                              <LoadablePhoto uri={`${API_BASE_URL}/photos/${item.id}`} style={styles.photo} />
+                              <Pressable style={[styles.iconBtn, styles.editBtn]} onPress={() => setEditingItem(item)}>
+                                <IconSymbol name="pencil" size={13} color="#fff" />
+                              </Pressable>
+                              <Pressable style={[styles.iconBtn, styles.delBtn]} onPress={() => confirmDelete(item)}>
+                                <IconSymbol name="trash" size={13} color="#fff" />
+                              </Pressable>
+                            </ThemedView>
+                          </Pressable>
+                          {inLaundry && (
+                            <ThemedText style={[styles.statusTag, { color: accentColor }]}>IN LAUNDRY</ThemedText>
+                          )}
+                        </ThemedView>
+                      );
+                    })}
+                  </View>
+                );
+              })()}
+            </ScrollView>
+          </>
         )}
 
         <EditItemModal
@@ -134,24 +152,29 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 20,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 14,
+  masthead: {
+    gap: 8,
+    marginBottom: 18,
+  },
+  eyebrow: {
+    fontFamily: Fonts.mono,
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 1.5,
   },
   h1: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  count: {
-    fontSize: 12,
+    fontFamily: Fonts.serif,
+    fontSize: 46,
+    lineHeight: 50,
     fontWeight: '600',
+    letterSpacing: -1,
+  },
+  rule: {
+    height: 1,
+    width: '100%',
   },
   spacing: {
     marginTop: 24,
@@ -159,70 +182,108 @@ const styles = StyleSheet.create({
   errorRow: {
     marginTop: 24,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 100,
-    backgroundColor: '#C05A2E',
+  errorButton: {
+    alignSelf: 'center',
+    paddingHorizontal: 32,
   },
-  retryText: {
-    color: '#F4EFE6',
+  filterScroll: {
+    flexGrow: 0,
+    marginBottom: 18,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 22,
+  },
+  gridScroll: {
+    flex: 1,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 3,
+    paddingBottom: 6,
+    borderBottomWidth: 1.5,
+    borderBottomColor: 'transparent',
+  },
+  tabText: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tabCount: {
+    fontFamily: Fonts.mono,
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: -2,
   },
   scrollContent: {
-    gap: 14,
+    gap: 18,
     paddingBottom: 32,
+  },
+  emptyNote: {
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+    fontSize: 16,
+    paddingTop: 8,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 14,
     paddingTop: 4,
   },
   card: {
     width: '47%',
-    borderRadius: 18,
-    padding: 10,
-    gap: 4,
+    gap: 6,
+    backgroundColor: 'transparent',
   },
   swatch: {
     position: 'relative',
-    borderRadius: 13,
+    borderRadius: 14,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   photo: {
     width: '100%',
-    aspectRatio: 1.1,
+    aspectRatio: 1,
   },
-  meta: {
-    fontSize: 12.5,
+  statusTag: {
+    fontFamily: Fonts.mono,
+    fontSize: 9.5,
     fontWeight: '700',
-    marginTop: 6,
-  },
-  laundryTag: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  addHint: {
-    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   iconBtn: {
     position: 'absolute',
-    top: 7,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    top: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   editBtn: {
-    left: 7,
-    backgroundColor: 'rgba(23,21,15,0.55)',
+    left: 8,
+    backgroundColor: 'rgba(23,20,15,0.55)',
   },
   delBtn: {
-    right: 7,
-    backgroundColor: '#C05A2E',
+    right: 8,
+    backgroundColor: 'rgba(23,20,15,0.55)',
+  },
+  button: {
+    paddingVertical: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+  },
+  buttonText: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
 });

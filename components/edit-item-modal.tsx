@@ -21,7 +21,11 @@ export function EditItemModal({
   onSave: (itemId: string, fields: EditableFields) => void;
 }) {
   const textColor = useThemeColor({}, 'text');
-  const lineColor = useThemeColor({}, 'icon');
+  const bgColor = useThemeColor({}, 'background');
+  const cardColor = useThemeColor({}, 'card');
+  const lineColor = useThemeColor({}, 'line');
+  const mutedColor = useThemeColor({}, 'muted');
+  const accentColor = useThemeColor({}, 'tint');
   const [category, setCategory] = useState('top');
   const [color, setColor] = useState('');
   const [pattern, setPattern] = useState('');
@@ -48,81 +52,83 @@ export function EditItemModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <ThemedView style={styles.sheet} lightColor="#FFFFFF" darkColor="#221F17">
+        <ThemedView style={[styles.sheet, { backgroundColor: cardColor }]}>
           <ThemedText type="title" style={styles.title}>
             Edit item
           </ThemedText>
 
-          <ThemedText style={styles.label} lightColor="#8B8477" darkColor="#9A9282">
-            Category
-          </ThemedText>
+          <ThemedText style={[styles.label, { color: mutedColor }]}>Category</ThemedText>
           <View style={styles.chipRow}>
             {CATEGORIES.map((c) => (
               <Pressable
                 key={c}
-                style={[styles.chip, { borderColor: lineColor }, category === c && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { borderColor: lineColor },
+                  category === c && { backgroundColor: accentColor, borderColor: accentColor },
+                ]}
                 onPress={() => setCategory(c)}>
-                <ThemedText style={category === c ? styles.chipTextActive : undefined}>{c}</ThemedText>
+                <ThemedText style={category === c ? { color: bgColor } : undefined}>{c}</ThemedText>
               </Pressable>
             ))}
           </View>
 
-          <ThemedText style={styles.label} lightColor="#8B8477" darkColor="#9A9282">
-            Color
-          </ThemedText>
+          <ThemedText style={[styles.label, { color: mutedColor }]}>Color</ThemedText>
           <TextInput
             style={[styles.input, { color: textColor, borderColor: lineColor }]}
             value={color}
             onChangeText={setColor}
             placeholder="e.g. navy blue"
-            placeholderTextColor="#8B8477"
+            placeholderTextColor={mutedColor}
           />
 
-          <ThemedText style={styles.label} lightColor="#8B8477" darkColor="#9A9282">
-            Pattern
-          </ThemedText>
+          <ThemedText style={[styles.label, { color: mutedColor }]}>Pattern</ThemedText>
           <TextInput
             style={[styles.input, { color: textColor, borderColor: lineColor }]}
             value={pattern}
             onChangeText={setPattern}
             placeholder="e.g. solid, striped, plaid"
-            placeholderTextColor="#8B8477"
+            placeholderTextColor={mutedColor}
           />
 
-          <ThemedText style={styles.label} lightColor="#8B8477" darkColor="#9A9282">
-            Formality (1 casual – 5 formal)
-          </ThemedText>
+          <ThemedText style={[styles.label, { color: mutedColor }]}>Formality (1 casual – 5 formal)</ThemedText>
           <View style={styles.chipRow}>
             {SCALE.map((n) => (
               <Pressable
                 key={n}
-                style={[styles.numChip, { borderColor: lineColor }, formality === n && styles.chipActive]}
+                style={[
+                  styles.numChip,
+                  { borderColor: lineColor },
+                  formality === n && { backgroundColor: accentColor, borderColor: accentColor },
+                ]}
                 onPress={() => setFormality(n)}>
-                <ThemedText style={formality === n ? styles.chipTextActive : undefined}>{n}</ThemedText>
+                <ThemedText style={formality === n ? { color: bgColor } : undefined}>{n}</ThemedText>
               </Pressable>
             ))}
           </View>
 
-          <ThemedText style={styles.label} lightColor="#8B8477" darkColor="#9A9282">
-            Warmth (1 light – 5 warm)
-          </ThemedText>
+          <ThemedText style={[styles.label, { color: mutedColor }]}>Warmth (1 light – 5 warm)</ThemedText>
           <View style={styles.chipRow}>
             {SCALE.map((n) => (
               <Pressable
                 key={n}
-                style={[styles.numChip, { borderColor: lineColor }, warmth === n && styles.chipActive]}
+                style={[
+                  styles.numChip,
+                  { borderColor: lineColor },
+                  warmth === n && { backgroundColor: accentColor, borderColor: accentColor },
+                ]}
                 onPress={() => setWarmth(n)}>
-                <ThemedText style={warmth === n ? styles.chipTextActive : undefined}>{n}</ThemedText>
+                <ThemedText style={warmth === n ? { color: bgColor } : undefined}>{n}</ThemedText>
               </Pressable>
             ))}
           </View>
 
           <View style={styles.actionRow}>
-            <Pressable style={[styles.button, styles.cancelButton, { borderColor: lineColor }]} onPress={onClose}>
+            <Pressable style={[styles.button, styles.cancelButton, { borderColor: textColor }]} onPress={onClose}>
               <ThemedText type="defaultSemiBold">Cancel</ThemedText>
             </Pressable>
-            <Pressable style={styles.button} onPress={handleSave}>
-              <ThemedText type="defaultSemiBold" style={styles.saveButtonText}>
+            <Pressable style={[styles.button, { backgroundColor: textColor }]} onPress={handleSave}>
+              <ThemedText type="defaultSemiBold" style={{ color: bgColor }}>
                 Save
               </ThemedText>
             </Pressable>
@@ -181,13 +187,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipActive: {
-    backgroundColor: '#C05A2E',
-    borderColor: '#C05A2E',
-  },
-  chipTextActive: {
-    color: '#F4EFE6',
-  },
   actionRow: {
     flexDirection: 'row',
     gap: 12,
@@ -198,13 +197,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 100,
     alignItems: 'center',
-    backgroundColor: '#C05A2E',
   },
   cancelButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-  },
-  saveButtonText: {
-    color: '#F4EFE6',
   },
 });

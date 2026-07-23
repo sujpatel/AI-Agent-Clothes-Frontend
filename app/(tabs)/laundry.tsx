@@ -1,21 +1,31 @@
-import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Collapsible } from '@/components/ui/collapsible';
+import { LoadablePhoto } from '@/components/loadable-photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL } from '@/config/api';
+import { Fonts } from '@/constants/theme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { useWardrobe } from '@/context/wardrobe-context';
 
 const CATEGORIES = ['top', 'bottom', 'shoes', 'outerwear', 'accessory'];
+const FILTERS = ['all', ...CATEGORIES];
 
 export default function LaundryScreen() {
   const { items, loading, error, fetchItems, finishLaundry } = useWardrobe();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('all');
+
+  const textColor = useThemeColor({}, 'text');
+  const bgColor = useThemeColor({}, 'background');
+  const cardColor = useThemeColor({}, 'card');
+  const lineColor = useThemeColor({}, 'line');
+  const mutedColor = useThemeColor({}, 'muted');
+  const accentColor = useThemeColor({}, 'tint');
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -45,35 +55,32 @@ export default function LaundryScreen() {
   }, [selected, finishLaundry]);
 
   const inLaundry = items.filter((item) => item.available === false);
+  const filteredItems =
+    selectedFilter === 'all' ? inLaundry : inLaundry.filter((item) => item.category === selectedFilter);
 
   return (
-    <ThemedView style={styles.container} lightColor="#F4EFE6" darkColor="#17150F">
+    <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.header} lightColor="#F4EFE6" darkColor="#17150F">
+        <ThemedView style={styles.masthead}>
+          <ThemedText style={[styles.eyebrow, { color: mutedColor }]}>{inLaundry.length} IN THE WASH</ThemedText>
           <ThemedText style={styles.h1}>Laundry</ThemedText>
-          <ThemedText style={styles.count} lightColor="#8B8477" darkColor="#9A9282">
-            {inLaundry.length} items
-          </ThemedText>
+          <ThemedView style={[styles.rule, { backgroundColor: lineColor }]} />
         </ThemedView>
 
         {loading && <ActivityIndicator size="large" style={styles.spacing} />}
 
         {error && !loading && (
-          <ThemedView style={styles.errorRow} lightColor="#F4EFE6" darkColor="#17150F">
-            <ThemedText lightColor="#8B8477" darkColor="#9A9282">
-              {error}
-            </ThemedText>
-            <Pressable style={styles.retryButton} onPress={fetchItems}>
-              <ThemedText type="defaultSemiBold" style={styles.retryText}>
-                Retry
-              </ThemedText>
+          <ThemedView style={styles.errorRow}>
+            <ThemedText style={{ color: mutedColor }}>{error}</ThemedText>
+            <Pressable style={[styles.button, styles.errorButton, { backgroundColor: textColor }]} onPress={fetchItems}>
+              <ThemedText style={[styles.buttonText, { color: bgColor }]}>RETRY</ThemedText>
             </Pressable>
           </ThemedView>
         )}
 
         {!loading && !error && inLaundry.length === 0 && (
-          <ThemedView style={styles.empty} lightColor="#F4EFE6" darkColor="#17150F">
-            <ThemedText style={styles.emptyText} lightColor="#8B8477" darkColor="#9A9282">
+          <ThemedView style={styles.empty}>
+            <ThemedText style={styles.emptyText}>
               Nothing in the wash.{'\n'}Your wardrobe is fully stocked.
             </ThemedText>
           </ThemedView>
@@ -82,44 +89,71 @@ export default function LaundryScreen() {
         {!loading && !error && inLaundry.length > 0 && (
           <>
             <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
-              {CATEGORIES.map((category) => {
-                const categoryItems = inLaundry.filter((item) => item.category === category);
-                if (categoryItems.length === 0) return null;
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterScroll}
+              contentContainerStyle={styles.filterRow}>
+              {FILTERS.map((filter) => {
+                const count =
+                  filter === 'all' ? inLaundry.length : inLaundry.filter((item) => item.category === filter).length;
+                if (filter !== 'all' && count === 0) return null;
+                const active = selectedFilter === filter;
                 return (
-                  <Collapsible key={category} title={`${category} · ${categoryItems.length}`}>
-                    <ThemedView style={styles.rowGroup}>
-                      {categoryItems.map((item) => (
-                        <Pressable
-                          key={item.id}
-                          onPress={() => toggleSelected(item.id)}
-                          disabled={busy}>
-                          <ThemedView style={styles.row} lightColor="#FFFFFF" darkColor="#221F17">
-                            <ThemedView
-                              style={[styles.checkbox, selected.has(item.id) && styles.checkboxChecked]}
-                            />
-                            <Image source={{ uri: `${API_BASE_URL}/photos/${item.id}` }} style={styles.thumb} />
-                            <ThemedView style={styles.rowText}>
-                              <ThemedText style={styles.rowMeta} lightColor="#8B8477" darkColor="#9A9282">
-                                {item.color} · {item.pattern}
-                              </ThemedText>
-                            </ThemedView>
-                          </ThemedView>
-                        </Pressable>
-                      ))}
-                    </ThemedView>
-                  </Collapsible>
+                  <Pressable
+                    key={filter}
+                    style={[styles.tab, active && { borderBottomColor: accentColor }]}
+                    onPress={() => setSelectedFilter(filter)}>
+                    <ThemedText style={[styles.tabText, { color: active ? textColor : mutedColor }]}>
+                      {filter.toUpperCase()}
+                    </ThemedText>
+                    <ThemedText style={[styles.tabCount, { color: active ? accentColor : mutedColor }]}>
+                      {count}
+                    </ThemedText>
+                  </Pressable>
                 );
               })}
             </ScrollView>
 
+            <ScrollView
+              style={styles.listScroll}
+              contentContainerStyle={styles.scrollContent}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
+              <ThemedView style={styles.rowGroup}>
+                {filteredItems.map((item) => {
+                  const isSelected = selected.has(item.id);
+                  return (
+                    <Pressable key={item.id} onPress={() => toggleSelected(item.id)} disabled={busy}>
+                      <ThemedView style={[styles.row, { backgroundColor: cardColor }]}>
+                        <ThemedView
+                          style={[
+                            styles.checkbox,
+                            { borderColor: isSelected ? accentColor : lineColor },
+                            isSelected && { backgroundColor: accentColor },
+                          ]}
+                        />
+                        <LoadablePhoto
+                          uri={`${API_BASE_URL}/photos/${item.id}`}
+                          style={[styles.thumb, { backgroundColor: lineColor }]}
+                        />
+                        <ThemedView style={styles.rowText}>
+                          <ThemedText style={styles.rowTitle}>{item.color}</ThemedText>
+                          <ThemedText style={[styles.rowMeta, { color: mutedColor }]}>
+                            {item.pattern.toUpperCase()}
+                          </ThemedText>
+                        </ThemedView>
+                      </ThemedView>
+                    </Pressable>
+                  );
+                })}
+              </ThemedView>
+            </ScrollView>
+
             <Pressable
-              style={[styles.button, selected.size === 0 && styles.buttonDisabled]}
+              style={[styles.button, { backgroundColor: textColor }, selected.size === 0 && styles.buttonDisabled]}
               onPress={handleFinishLaundry}
               disabled={busy || selected.size === 0}>
-              <ThemedText type="defaultSemiBold" style={styles.buttonText}>
-                {busy ? 'Working…' : `Finish laundry · ${selected.size} selected`}
+              <ThemedText style={[styles.buttonText, { color: bgColor }]}>
+                {busy ? 'WORKING…' : `FINISH LAUNDRY · ${selected.size}`}
               </ThemedText>
             </Pressable>
           </>
@@ -135,24 +169,29 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 20,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 14,
+  masthead: {
+    gap: 8,
+    marginBottom: 18,
+  },
+  eyebrow: {
+    fontFamily: Fonts.mono,
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 1.5,
   },
   h1: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  count: {
-    fontSize: 12,
+    fontFamily: Fonts.serif,
+    fontSize: 46,
+    lineHeight: 50,
     fontWeight: '600',
+    letterSpacing: -1,
+  },
+  rule: {
+    height: 1,
+    width: '100%',
   },
   spacing: {
     marginTop: 24,
@@ -160,16 +199,11 @@ const styles = StyleSheet.create({
   errorRow: {
     marginTop: 24,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 100,
-    backgroundColor: '#C05A2E',
-  },
-  retryText: {
-    color: '#F4EFE6',
+  errorButton: {
+    alignSelf: 'center',
+    paddingHorizontal: 32,
   },
   empty: {
     flex: 1,
@@ -178,65 +212,101 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   emptyText: {
-    fontSize: 14,
+    fontFamily: Fonts.serif,
+    fontSize: 18,
     fontStyle: 'italic',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 26,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    marginBottom: 18,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 22,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 3,
+    paddingBottom: 6,
+    borderBottomWidth: 1.5,
+    borderBottomColor: 'transparent',
+  },
+  tabText: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tabCount: {
+    fontFamily: Fonts.mono,
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: -2,
+  },
+  listScroll: {
+    flex: 1,
   },
   scrollContent: {
-    gap: 16,
-    paddingTop: 4,
     paddingBottom: 16,
   },
   rowGroup: {
-    gap: 8,
-    paddingTop: 4,
+    gap: 10,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     padding: 10,
     borderRadius: 14,
   },
   rowText: {
     flex: 1,
     backgroundColor: 'transparent',
+    gap: 1,
+  },
+  rowTitle: {
+    fontFamily: Fonts.serif,
+    fontSize: 16,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
   rowMeta: {
-    fontSize: 12.5,
+    fontFamily: Fonts.mono,
+    fontSize: 9.5,
     fontWeight: '600',
+    letterSpacing: 1,
   },
   thumb: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     borderRadius: 10,
-    backgroundColor: '#ccc',
   },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: '#C05A2E',
     backgroundColor: 'transparent',
-  },
-  checkboxChecked: {
-    backgroundColor: '#C05A2E',
   },
   button: {
     alignSelf: 'stretch',
-    paddingVertical: 15,
+    paddingVertical: 16,
     borderRadius: 100,
     alignItems: 'center',
-    backgroundColor: '#C05A2E',
     marginTop: 4,
     marginBottom: 8,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   buttonText: {
-    color: '#F4EFE6',
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
 });

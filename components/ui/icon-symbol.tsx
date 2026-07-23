@@ -26,6 +26,10 @@ const MAPPING = {
   'hanger': 'checkroom',
   'magnifyingglass': 'search',
   'camera.fill': 'photo-camera',
+  'tshirt': 'checkroom',
+  'bag.fill': 'checkroom',
+  'figure.walk': 'directions-walk',
+  'gearshape.fill': 'settings',
 } as IconMapping;
 
 /**
