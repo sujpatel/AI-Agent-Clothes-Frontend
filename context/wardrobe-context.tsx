@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
 import { API_BASE_URL } from '@/config/api';
+import { apiFetch } from '@/config/api-fetch';
 import { useToast } from '@/context/toast-context';
 
 export type WardrobeItem = {
@@ -39,7 +40,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/items`);
+      const response = await apiFetch(`${API_BASE_URL}/items`);
       if (!response.ok) throw new Error(`Server responded ${response.status}`);
       const data: WardrobeItem[] = await response.json();
       setItems(data);
@@ -56,7 +57,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
       // re-renders with the new value right away, no refetch race.
       setItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, available: false } : item)));
       try {
-        const response = await fetch(`${API_BASE_URL}/laundry/add`, {
+        const response = await apiFetch(`${API_BASE_URL}/laundry/add`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ item_ids: [itemId] }),
@@ -75,7 +76,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
     async (itemIds: string[]) => {
       setItems((prev) => prev.map((item) => (itemIds.includes(item.id) ? { ...item, available: true } : item)));
       try {
-        const response = await fetch(`${API_BASE_URL}/laundry/finish`, {
+        const response = await apiFetch(`${API_BASE_URL}/laundry/finish`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ item_ids: itemIds }),
@@ -101,7 +102,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
         })
       );
       try {
-        const response = await fetch(`${API_BASE_URL}/items/${itemId}`, {
+        const response = await apiFetch(`${API_BASE_URL}/items/${itemId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fields),
@@ -129,7 +130,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
         return prev.filter((item) => item.id !== itemId);
       });
       try {
-        const response = await fetch(`${API_BASE_URL}/items/${itemId}`, { method: 'DELETE' });
+        const response = await apiFetch(`${API_BASE_URL}/items/${itemId}`, { method: 'DELETE' });
         if (!response.ok) throw new Error(`Server responded ${response.status}`);
         showToast('Item deleted');
       } catch {

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useAuth } from '@/context/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 /** A photo that shows a distinct dim/pulsing placeholder while loading and a
@@ -12,12 +13,13 @@ export function LoadablePhoto({ uri, style }: { uri: string; style?: StyleProp<V
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const lineColor = useThemeColor({}, 'line');
   const mutedColor = useThemeColor({}, 'muted');
+  const { session } = useAuth();
 
   return (
     <View style={style}>
       {status !== 'error' && (
         <Image
-          source={{ uri }}
+          source={{ uri, headers: { Authorization: `Bearer ${session?.access_token}` } }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           onLoad={() => setStatus('loaded')}

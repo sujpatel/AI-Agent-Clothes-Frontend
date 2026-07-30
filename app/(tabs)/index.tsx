@@ -11,7 +11,9 @@ import { StyleProfileModal } from '@/components/style-profile-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL } from '@/config/api';
+import { apiFetch } from '@/config/api-fetch';
 import { Fonts } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 type Outfit = {
@@ -126,7 +128,7 @@ export default function GenerateScreen() {
       if (styleProfile !== 'No preference') {
         params.set('style_profile', styleProfile);
       }
-      const response = await fetch(`${API_BASE_URL}/outfit/today?${params}`);
+      const response = await apiFetch(`${API_BASE_URL}/outfit/today?${params}`);
       if (!response.ok) throw new Error(`Server responded ${response.status}`);
       const data = await response.json();
       if (!isCompleteOutfit(data)) throw new Error('Received an incomplete outfit.');
@@ -157,7 +159,7 @@ export default function GenerateScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/outfit/override`, {
+      const response = await apiFetch(`${API_BASE_URL}/outfit/override`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ correction }),
@@ -374,6 +376,7 @@ function StackGarment({
   isSwapping?: boolean;
   disabled?: boolean;
 }) {
+  const { session } = useAuth();
   if (!itemId) return null;
   return (
     <Pressable
@@ -383,7 +386,11 @@ function StackGarment({
       {isSwapping ? (
         <ActivityIndicator size="small" />
       ) : (
-        <Image source={{ uri: `${API_BASE_URL}/photos/${itemId}` }} style={styles.stackPhoto} contentFit="cover" />
+        <Image
+          source={{ uri: `${API_BASE_URL}/photos/${itemId}`, headers: { Authorization: `Bearer ${session?.access_token}` } }}
+          style={styles.stackPhoto}
+          contentFit="cover"
+        />
       )}
     </Pressable>
   );

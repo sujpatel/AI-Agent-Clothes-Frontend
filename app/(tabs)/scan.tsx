@@ -8,7 +8,9 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL } from '@/config/api';
+import { apiFetch } from '@/config/api-fetch';
 import { Fonts } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useWardrobe } from '@/context/wardrobe-context';
 
@@ -26,6 +28,7 @@ type PendingItem = TaggedItem & { keep: boolean };
 
 export default function ScanScreen() {
   const { fetchItems } = useWardrobe();
+  const { session } = useAuth();
   const textColor = useThemeColor({}, 'text');
   const bgColor = useThemeColor({}, 'background');
   const cardColor = useThemeColor({}, 'card');
@@ -78,7 +81,7 @@ export default function ScanScreen() {
         type: previewPhoto.mimeType ?? 'image/jpeg',
       } as unknown as Blob);
 
-      const response = await fetch(`${API_BASE_URL}/items`, {
+      const response = await apiFetch(`${API_BASE_URL}/items`, {
         method: 'POST',
         body: formData,
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -136,7 +139,7 @@ export default function ScanScreen() {
         type: batchPreviewPhoto.mimeType ?? 'image/jpeg',
       } as unknown as Blob);
 
-      const response = await fetch(`${API_BASE_URL}/items/batch/detect`, {
+      const response = await apiFetch(`${API_BASE_URL}/items/batch/detect`, {
         method: 'POST',
         body: formData,
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -167,7 +170,7 @@ export default function ScanScreen() {
   const cancelBatchReview = useCallback(async () => {
     if (!pendingItems) return;
     await Promise.all(
-      pendingItems.map((item) => fetch(`${API_BASE_URL}/items/pending/${item.item_id}`, { method: 'DELETE' }))
+      pendingItems.map((item) => apiFetch(`${API_BASE_URL}/items/pending/${item.item_id}`, { method: 'DELETE' }))
     );
     setPendingItems(null);
   }, [pendingItems]);
@@ -180,11 +183,11 @@ export default function ScanScreen() {
     setConfirming(true);
     try {
       await Promise.all(
-        discarded.map((item) => fetch(`${API_BASE_URL}/items/pending/${item.item_id}`, { method: 'DELETE' }))
+        discarded.map((item) => apiFetch(`${API_BASE_URL}/items/pending/${item.item_id}`, { method: 'DELETE' }))
       );
 
       if (kept.length > 0) {
-        const response = await fetch(`${API_BASE_URL}/items/batch/confirm`, {
+        const response = await apiFetch(`${API_BASE_URL}/items/batch/confirm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -281,7 +284,10 @@ export default function ScanScreen() {
               <ThemedText style={[styles.plateTag, { color: accentColor }]}>ADDED TO WARDROBE</ThemedText>
               <ThemedView style={[styles.taggedPhotoWrap, { backgroundColor: lineColor }]}>
                 <Image
-                  source={{ uri: `${API_BASE_URL}/photos/${taggedItem.item_id}` }}
+                  source={{
+                    uri: `${API_BASE_URL}/photos/${taggedItem.item_id}`,
+                    headers: { Authorization: `Bearer ${session?.access_token}` },
+                  }}
                   style={styles.photo}
                   contentFit="cover"
                 />
@@ -368,7 +374,10 @@ export default function ScanScreen() {
                   onPress={() => toggleKeep(item.item_id)}>
                   <View style={styles.reviewPhotoWrap}>
                     <Image
-                      source={{ uri: `${API_BASE_URL}/photos/${item.item_id}` }}
+                      source={{
+                        uri: `${API_BASE_URL}/photos/${item.item_id}`,
+                        headers: { Authorization: `Bearer ${session?.access_token}` },
+                      }}
                       style={[styles.reviewPhoto, { opacity: item.keep ? 1 : 0.35 }]}
                       contentFit="cover"
                     />
