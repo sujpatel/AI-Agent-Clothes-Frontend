@@ -13,7 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL } from '@/config/api';
 import { apiFetch } from '@/config/api-fetch';
 import { Fonts } from '@/constants/theme';
-import { useAuth } from '@/context/auth-context';
+import { useAuthedPhotoSource } from '@/hooks/use-authed-photo-source';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 type Outfit = {
@@ -376,7 +376,7 @@ function StackGarment({
   isSwapping?: boolean;
   disabled?: boolean;
 }) {
-  const { session } = useAuth();
+  const source = useAuthedPhotoSource(`${API_BASE_URL}/photos/${itemId}`);
   if (!itemId) return null;
   return (
     <Pressable
@@ -386,11 +386,7 @@ function StackGarment({
       {isSwapping ? (
         <ActivityIndicator size="small" />
       ) : (
-        <Image
-          source={{ uri: `${API_BASE_URL}/photos/${itemId}`, headers: { Authorization: `Bearer ${session?.access_token}` } }}
-          style={styles.stackPhoto}
-          contentFit="cover"
-        />
+        <Image source={source} style={styles.stackPhoto} contentFit="cover" />
       )}
     </Pressable>
   );

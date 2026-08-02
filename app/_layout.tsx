@@ -10,10 +10,6 @@ import { ToastProvider } from '@/context/toast-context';
 import { WardrobeProvider } from '@/context/wardrobe-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
-
 function RootNavigator() {
   const { session, loading } = useAuth();
 
@@ -25,25 +21,28 @@ function RootNavigator() {
     );
   }
 
+  // Stack.Protected is Expo Router's own guard mechanism — unlike returning
+  // an entirely different <Stack> tree per branch (the previous approach),
+  // this lets the router itself track which group is reachable, which is
+  // what unstable_settings.anchor expects to coordinate with. The hand-rolled
+  // if/else version left the router's internal state out of sync with our
+  // JS condition, showing tabs even when session was null.
+  const content = (
+    <Stack>
+      <Stack.Protected guard={!!session}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+      </Stack.Protected>
+      <Stack.Protected guard={!session}>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+      </Stack.Protected>
+    </Stack>
+  );
+
   // WardrobeProvider only mounts once a session exists, so its initial fetch
   // never fires without a token — and it naturally resets on logout since
   // unmounting drops its in-memory items/loading/error state.
-  if (session) {
-    return (
-      <WardrobeProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
-      </WardrobeProvider>
-    );
-  }
-
-  return (
-    <Stack>
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-    </Stack>
-  );
+  return session ? <WardrobeProvider>{content}</WardrobeProvider> : content;
 }
 
 export default function RootLayout() {

@@ -1,3 +1,3 @@
-// Your computer's local network IP, so the phone (on the same WiFi) can reach
-// the FastAPI server running on your machine. Update this if your IP changes.
-export const API_BASE_URL = 'http://192.168.1.33:8000';
+// The backend, hosted on Railway — reachable from anywhere, not just your
+// local WiFi, so testers no longer need to be on the same network as you.
+export const API_BASE_URL = 'https://ai-agent-clothes-production.up.railway.app';

@@ -7,10 +7,15 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 
-  const headers = new Headers(options.headers);
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
+  if (!token) {
+    // Every backend route requires auth — sending the request anyway would
+    // just produce a confusing 422/401 from the server. Fail here instead,
+    // with a message that actually explains what's wrong.
+    throw new Error('Not signed in — please log in again.');
   }
+
+  const headers = new Headers(options.headers);
+  headers.set('Authorization', `Bearer ${token}`);
 
   return fetch(url, { ...options, headers });
 }

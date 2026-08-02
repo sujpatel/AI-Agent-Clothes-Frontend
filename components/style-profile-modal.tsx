@@ -2,6 +2,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/context/auth-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 const STYLES = ['No preference', 'Minimalist', 'Classic', 'Streetwear', 'Vintage', 'Y2K', 'Bohemian'];
@@ -17,6 +18,7 @@ export function StyleProfileModal({
   onClose: () => void;
   onSave: (style: string) => void;
 }) {
+  const { signOut } = useAuth();
   const textColor = useThemeColor({}, 'text');
   const bgColor = useThemeColor({}, 'background');
   const cardColor = useThemeColor({}, 'card');
@@ -57,6 +59,15 @@ export function StyleProfileModal({
             <ThemedText type="defaultSemiBold" style={{ color: bgColor }}>
               Done
             </ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={styles.signOutLink}
+            onPress={() => {
+              onClose();
+              signOut();
+            }}>
+            <ThemedText style={[styles.signOutText, { color: mutedColor }]}>Sign out</ThemedText>
           </Pressable>
         </ThemedView>
       </View>
@@ -101,5 +112,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 100,
     alignItems: 'center',
+  },
+  signOutLink: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  signOutText: {
+    fontSize: 13,
   },
 });

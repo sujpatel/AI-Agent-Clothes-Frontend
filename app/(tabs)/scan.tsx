@@ -10,7 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL } from '@/config/api';
 import { apiFetch } from '@/config/api-fetch';
 import { Fonts } from '@/constants/theme';
-import { useAuth } from '@/context/auth-context';
+import { useAuthedPhotoSourceBuilder } from '@/hooks/use-authed-photo-source';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useWardrobe } from '@/context/wardrobe-context';
 
@@ -28,7 +28,7 @@ type PendingItem = TaggedItem & { keep: boolean };
 
 export default function ScanScreen() {
   const { fetchItems } = useWardrobe();
-  const { session } = useAuth();
+  const photoSource = useAuthedPhotoSourceBuilder();
   const textColor = useThemeColor({}, 'text');
   const bgColor = useThemeColor({}, 'background');
   const cardColor = useThemeColor({}, 'card');
@@ -284,10 +284,7 @@ export default function ScanScreen() {
               <ThemedText style={[styles.plateTag, { color: accentColor }]}>ADDED TO WARDROBE</ThemedText>
               <ThemedView style={[styles.taggedPhotoWrap, { backgroundColor: lineColor }]}>
                 <Image
-                  source={{
-                    uri: `${API_BASE_URL}/photos/${taggedItem.item_id}`,
-                    headers: { Authorization: `Bearer ${session?.access_token}` },
-                  }}
+                  source={photoSource(`${API_BASE_URL}/photos/${taggedItem.item_id}`)}
                   style={styles.photo}
                   contentFit="cover"
                 />
@@ -374,10 +371,7 @@ export default function ScanScreen() {
                   onPress={() => toggleKeep(item.item_id)}>
                   <View style={styles.reviewPhotoWrap}>
                     <Image
-                      source={{
-                        uri: `${API_BASE_URL}/photos/${item.item_id}`,
-                        headers: { Authorization: `Bearer ${session?.access_token}` },
-                      }}
+                      source={photoSource(`${API_BASE_URL}/photos/${item.item_id}`)}
                       style={[styles.reviewPhoto, { opacity: item.keep ? 1 : 0.35 }]}
                       contentFit="cover"
                     />
