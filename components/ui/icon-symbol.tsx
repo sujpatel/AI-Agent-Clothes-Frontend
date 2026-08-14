@@ -30,6 +30,7 @@ const MAPPING = {
   'bag.fill': 'checkroom',
   'figure.walk': 'directions-walk',
   'gearshape.fill': 'settings',
+  'checkmark': 'check',
 } as IconMapping;
 
 /**

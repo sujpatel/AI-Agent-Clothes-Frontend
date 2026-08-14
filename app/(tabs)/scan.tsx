@@ -8,6 +8,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL } from '@/config/api';
+import { friendlyErrorMessage } from '@/config/api-error';
 import { apiFetch } from '@/config/api-fetch';
 import { Fonts } from '@/constants/theme';
 import { useAuthedPhotoSourceBuilder } from '@/hooks/use-authed-photo-source';
@@ -26,6 +27,14 @@ type TaggedItem = {
 
 type PendingItem = TaggedItem & { keep: boolean };
 
+type CapturedPhoto = {
+  key: string; // local-only id, stable across the photo's lifetime
+  uri: string;
+  status: 'uploading' | 'done' | 'error';
+  item?: TaggedItem; // set once status is 'done'
+  errorMessage?: string;
+};
+
 export default function ScanScreen() {
   const { fetchItems } = useWardrobe();
   const photoSource = useAuthedPhotoSourceBuilder();
@@ -36,11 +45,14 @@ export default function ScanScreen() {
   const mutedColor = useThemeColor({}, 'muted');
   const accentColor = useThemeColor({}, 'tint');
 
-  // Single-item flow
-  const [uploading, setUploading] = useState(false);
-  const [taggedItem, setTaggedItem] = useState<TaggedItem | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [previewPhoto, setPreviewPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  // Single-item flow — continuous capture: the camera reopens after every
+  // shot with no per-photo confirmation. Each photo uploads/tags itself in
+  // the background as soon as it's taken, so by the time the user taps
+  // Done and reaches the review grid, most items are already ready.
+  const [capturedPhotos, setCapturedPhotos] = useState<CapturedPhoto[]>([]);
+  const [reviewingCaptures, setReviewingCaptures] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [justAddedCount, setJustAddedCount] = useState<number | null>(null);
 
   // Batch (multi-item) flow
   const [batchPreviewPhoto, setBatchPreviewPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
@@ -50,35 +62,13 @@ export default function ScanScreen() {
   const [confirming, setConfirming] = useState(false);
   const [batchAddedCount, setBatchAddedCount] = useState<number | null>(null);
 
-  const capturePhoto = useCallback(async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setUploadError('Camera permission is required to add an item.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-
-    setUploadError(null);
-    setTaggedItem(null);
-    setPreviewPhoto(result.assets[0]);
-  }, []);
-
-  const confirmUpload = useCallback(async () => {
-    if (!previewPhoto) return;
-
-    setUploading(true);
-    setUploadError(null);
+  const uploadOnePhoto = useCallback(async (key: string, uri: string, fileName?: string, mimeType?: string) => {
     try {
       const formData = new FormData();
       formData.append('photo', {
-        uri: previewPhoto.uri,
-        name: previewPhoto.fileName ?? 'photo.jpg',
-        type: previewPhoto.mimeType ?? 'image/jpeg',
+        uri,
+        name: fileName ?? 'photo.jpg',
+        type: mimeType ?? 'image/jpeg',
       } as unknown as Blob);
 
       const response = await apiFetch(`${API_BASE_URL}/items`, {
@@ -86,22 +76,83 @@ export default function ScanScreen() {
         body: formData,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      if (!response.ok) throw new Error(`Server responded ${response.status}`);
+      if (!response.ok) throw new Error(await friendlyErrorMessage(response));
       const data: TaggedItem = await response.json();
-      setTaggedItem(data);
-      setPreviewPhoto(null);
-      await fetchItems();
+      setCapturedPhotos((prev) => prev.map((p) => (p.key === key ? { ...p, status: 'done', item: data } : p)));
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setUploading(false);
+      setCapturedPhotos((prev) =>
+        prev.map((p) =>
+          p.key === key
+            ? { ...p, status: 'error', errorMessage: err instanceof Error ? err.message : 'Something went wrong' }
+            : p
+        )
+      );
     }
-  }, [previewPhoto, fetchItems]);
-
-  const cancelPreview = useCallback(() => {
-    setPreviewPhoto(null);
-    setUploadError(null);
   }, []);
+
+  const captureOnePhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setCaptureError('Camera permission is required to add items.');
+      return false;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return false;
+
+    setCaptureError(null);
+    setJustAddedCount(null);
+    const photo = result.assets[0];
+    const key = `${Date.now()}-${Math.random()}`;
+    setCapturedPhotos((prev) => [...prev, { key, uri: photo.uri, status: 'uploading' }]);
+    // Fire-and-forget — the camera reopens immediately rather than waiting
+    // for this to finish, so capturing stays fast and continuous.
+    uploadOnePhoto(key, photo.uri, photo.fileName ?? undefined, photo.mimeType ?? undefined);
+    return true;
+  }, [uploadOnePhoto]);
+
+  const startCapturing = useCallback(async () => {
+    setReviewingCaptures(false);
+    // Loop (not recursion, so a long capture session can't grow the call
+    // stack) — keep reopening the camera until the user backs out of it via
+    // its own Cancel/X, which is the natural "I'm done capturing" signal.
+    // eslint-disable-next-line no-await-in-loop
+    while (await captureOnePhoto()) {
+      // intentionally empty — captureOnePhoto handles each iteration
+    }
+    setReviewingCaptures(true);
+  }, [captureOnePhoto]);
+
+  const removeCapturedPhoto = useCallback(async (key: string) => {
+    setCapturedPhotos((prev) => {
+      const target = prev.find((p) => p.key === key);
+      if (target?.status === 'done' && target.item) {
+        apiFetch(`${API_BASE_URL}/items/${target.item.item_id}`, { method: 'DELETE' }).catch(() => {});
+      }
+      return prev.filter((p) => p.key !== key);
+    });
+  }, []);
+
+  const retryCapturedPhoto = useCallback(
+    (key: string) => {
+      const photo = capturedPhotos.find((p) => p.key === key);
+      if (!photo) return;
+      setCapturedPhotos((prev) => prev.map((p) => (p.key === key ? { ...p, status: 'uploading' } : p)));
+      uploadOnePhoto(key, photo.uri);
+    },
+    [capturedPhotos, uploadOnePhoto]
+  );
+
+  const finishReview = useCallback(async () => {
+    const addedCount = capturedPhotos.filter((p) => p.status === 'done').length;
+    setJustAddedCount(addedCount);
+    setCapturedPhotos([]);
+    setReviewingCaptures(false);
+    if (addedCount > 0) await fetchItems();
+  }, [capturedPhotos, fetchItems]);
 
   const captureBatchPhoto = useCallback(async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -144,7 +195,7 @@ export default function ScanScreen() {
         body: formData,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      if (!response.ok) throw new Error(`Server responded ${response.status}`);
+      if (!response.ok) throw new Error(await friendlyErrorMessage(response));
       const data: { items: TaggedItem[] } = await response.json();
 
       if (data.items.length === 0) {
@@ -194,7 +245,7 @@ export default function ScanScreen() {
             items: kept.map(({ keep, ...item }) => item),
           }),
         });
-        if (!response.ok) throw new Error(`Server responded ${response.status}`);
+        if (!response.ok) throw new Error(await friendlyErrorMessage(response));
         await fetchItems();
       }
 
@@ -207,7 +258,7 @@ export default function ScanScreen() {
     }
   }, [pendingItems, fetchItems]);
 
-  const showEmptyState = !previewPhoto && !taggedItem && !batchPreviewPhoto && !pendingItems && !detecting;
+  const showEmptyState = !reviewingCaptures && !batchPreviewPhoto && !pendingItems && !detecting;
 
   return (
     <ThemedView style={styles.container}>
@@ -227,83 +278,27 @@ export default function ScanScreen() {
               <ThemedText style={styles.instruction}>
                 Photograph a piece, or lay out several with space between them to add many at once.
               </ThemedText>
+              {justAddedCount !== null && (
+                <ThemedText style={[styles.confirmedText, { color: accentColor }]}>
+                  Added {justAddedCount} {justAddedCount === 1 ? 'item' : 'items'} to your wardrobe.
+                </ThemedText>
+              )}
               {batchAddedCount !== null && (
                 <ThemedText style={[styles.confirmedText, { color: accentColor }]}>
                   Added {batchAddedCount} {batchAddedCount === 1 ? 'item' : 'items'} to your wardrobe.
                 </ThemedText>
               )}
+              {captureError && (
+                <ThemedText style={[styles.errorText, { color: mutedColor }]}>{captureError}</ThemedText>
+              )}
               {detectError && <ThemedText style={[styles.errorText, { color: mutedColor }]}>{detectError}</ThemedText>}
-              <Pressable style={[styles.button, { backgroundColor: textColor }]} onPress={capturePhoto}>
-                <ThemedText style={[styles.buttonText, { color: bgColor }]}>TAKE PHOTO</ThemedText>
+              <Pressable style={[styles.button, { backgroundColor: textColor }]} onPress={startCapturing}>
+                <ThemedText style={[styles.buttonText, { color: bgColor }]}>TAKE PHOTOS</ThemedText>
               </Pressable>
               <Pressable
                 style={[styles.button, styles.outlineButton, { borderColor: textColor }]}
                 onPress={captureBatchPhoto}>
                 <ThemedText style={[styles.buttonText, { color: textColor }]}>ADD MULTIPLE ITEMS</ThemedText>
-              </Pressable>
-            </ThemedView>
-          )}
-
-          {previewPhoto && (
-            <ThemedView style={styles.plate}>
-              <ThemedText style={[styles.plateTag, { color: accentColor }]}>NEW ITEM</ThemedText>
-              <Image source={{ uri: previewPhoto.uri }} style={styles.previewImage} contentFit="cover" />
-
-              {uploading && <ActivityIndicator size="large" style={styles.spacing} />}
-
-              {uploadError && !uploading && (
-                <ThemedText style={[styles.errorText, { color: mutedColor }]}>{uploadError}</ThemedText>
-              )}
-
-              {!uploading && (
-                <ThemedView style={styles.previewActions}>
-                  <Pressable
-                    style={[styles.button, styles.outlineButton, styles.previewButtonFlex, { borderColor: textColor }]}
-                    onPress={cancelPreview}>
-                    <ThemedText style={[styles.buttonText, { color: textColor }]}>CANCEL</ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.button, styles.outlineButton, styles.previewButtonFlex, { borderColor: textColor }]}
-                    onPress={capturePhoto}>
-                    <ThemedText style={[styles.buttonText, { color: textColor }]}>RETAKE</ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.button, styles.previewButtonFlex, { backgroundColor: textColor }]}
-                    onPress={confirmUpload}>
-                    <ThemedText style={[styles.buttonText, { color: bgColor }]}>
-                      {uploadError ? 'RETRY' : 'USE'}
-                    </ThemedText>
-                  </Pressable>
-                </ThemedView>
-              )}
-            </ThemedView>
-          )}
-
-          {taggedItem && !uploading && (
-            <ThemedView style={styles.plate}>
-              <ThemedText style={[styles.plateTag, { color: accentColor }]}>ADDED TO WARDROBE</ThemedText>
-              <ThemedView style={[styles.taggedPhotoWrap, { backgroundColor: lineColor }]}>
-                <Image
-                  source={photoSource(`${API_BASE_URL}/photos/${taggedItem.item_id}`)}
-                  style={styles.photo}
-                  contentFit="cover"
-                />
-              </ThemedView>
-              <ThemedText style={styles.category}>{taggedItem.category}</ThemedText>
-
-              <ThemedView style={[styles.rule, { backgroundColor: lineColor }]} />
-              <ThemedView style={styles.specRow}>
-                <ThemedText style={[styles.specLabel, { color: mutedColor }]}>COLOR</ThemedText>
-                <ThemedText style={styles.specValue}>{taggedItem.color}</ThemedText>
-              </ThemedView>
-              <ThemedView style={styles.specRow}>
-                <ThemedText style={[styles.specLabel, { color: mutedColor }]}>PATTERN</ThemedText>
-                <ThemedText style={styles.specValue}>{taggedItem.pattern}</ThemedText>
-              </ThemedView>
-
-              <ThemedText style={styles.description}>{taggedItem.description}</ThemedText>
-              <Pressable style={[styles.button, { backgroundColor: textColor }]} onPress={() => setTaggedItem(null)}>
-                <ThemedText style={[styles.buttonText, { color: bgColor }]}>ADD ANOTHER</ThemedText>
               </Pressable>
             </ThemedView>
           )}
@@ -350,6 +345,79 @@ export default function ScanScreen() {
             </ThemedView>
           )}
         </ThemedView>
+
+        {reviewingCaptures && (
+          <ThemedView style={styles.reviewOverlay}>
+            <ThemedView style={styles.reviewHeader}>
+              <ThemedText style={[styles.eyebrow, { color: mutedColor }]}>REVIEW</ThemedText>
+              <ThemedText style={styles.reviewTitle}>
+                {capturedPhotos.length} {capturedPhotos.length === 1 ? 'photo' : 'photos'} taken
+              </ThemedText>
+              <ThemedText style={[styles.reviewHint, { color: mutedColor }]}>
+                Tap a photo to remove it. Failed ones can be retried.
+              </ThemedText>
+            </ThemedView>
+
+            {capturedPhotos.length === 0 ? (
+              <ThemedText style={[styles.instruction, styles.spacing]}>No photos yet — go back and take one.</ThemedText>
+            ) : (
+              <ScrollView contentContainerStyle={styles.reviewGrid}>
+                {capturedPhotos.map((photo) => (
+                  <Pressable
+                    key={photo.key}
+                    style={[styles.reviewCard, { backgroundColor: cardColor }]}
+                    onPress={() => (photo.status === 'error' ? retryCapturedPhoto(photo.key) : removeCapturedPhoto(photo.key))}>
+                    <View style={styles.reviewPhotoWrap}>
+                      <Image
+                        source={{ uri: photo.uri }}
+                        style={[styles.reviewPhoto, { opacity: photo.status === 'uploading' ? 0.5 : 1 }]}
+                        contentFit="cover"
+                      />
+                      {photo.status === 'uploading' && (
+                        <ThemedView style={[styles.captureStatusOverlay, { backgroundColor: 'transparent' }]}>
+                          <ActivityIndicator size="small" />
+                        </ThemedView>
+                      )}
+                      {photo.status === 'done' && (
+                        <ThemedView style={[styles.discardBadge, { backgroundColor: accentColor }]}>
+                          <IconSymbol name="checkmark" size={10} color={bgColor} />
+                        </ThemedView>
+                      )}
+                      {photo.status === 'error' && (
+                        <ThemedView style={[styles.discardBadge, { backgroundColor: textColor }]}>
+                          <ThemedText style={[styles.discardBadgeText, { color: bgColor }]}>RETRY</ThemedText>
+                        </ThemedView>
+                      )}
+                    </View>
+                    <ThemedText style={[styles.reviewCategory, photo.status === 'error' && { color: mutedColor }]}>
+                      {photo.status === 'done' ? photo.item?.category : photo.status === 'error' ? 'Failed — tap to retry' : 'Tagging…'}
+                    </ThemedText>
+                    {photo.status === 'error' && photo.errorMessage && (
+                      <ThemedText
+                        style={[styles.reviewMeta, styles.errorMetaText, { color: mutedColor }]}
+                        numberOfLines={2}>
+                        {photo.errorMessage}
+                      </ThemedText>
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            <ThemedView style={styles.reviewActions}>
+              <Pressable
+                style={[styles.button, styles.outlineButton, styles.previewButtonFlex, { borderColor: textColor }]}
+                onPress={startCapturing}>
+                <ThemedText style={[styles.buttonText, { color: textColor }]}>TAKE ANOTHER</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.button, styles.previewButtonFlex, { backgroundColor: textColor }]}
+                onPress={finishReview}>
+                <ThemedText style={[styles.buttonText, { color: bgColor }]}>DONE</ThemedText>
+              </Pressable>
+            </ThemedView>
+          </ThemedView>
+        )}
 
         {pendingItems && (
           <ThemedView style={styles.reviewOverlay}>
@@ -499,45 +567,6 @@ const styles = StyleSheet.create({
   previewButtonFlex: {
     flex: 1,
   },
-  taggedPhotoWrap: {
-    width: '55%',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  photo: {
-    width: '100%',
-    aspectRatio: 1,
-  },
-  category: {
-    fontFamily: Fonts.serif,
-    fontSize: 24,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-    letterSpacing: -0.3,
-  },
-  specRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    alignSelf: 'stretch',
-  },
-  specLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-  },
-  specValue: {
-    fontSize: 15,
-    textTransform: 'capitalize',
-  },
-  description: {
-    fontFamily: Fonts.serif,
-    fontStyle: 'italic',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
   errorText: {
     textAlign: 'center',
   },
@@ -605,6 +634,11 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
   },
+  captureStatusOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   discardBadge: {
     position: 'absolute',
     top: 8,
@@ -629,6 +663,9 @@ const styles = StyleSheet.create({
   reviewMeta: {
     fontSize: 11,
     textTransform: 'capitalize',
+  },
+  errorMetaText: {
+    textTransform: 'none',
   },
   reviewActions: {
     flexDirection: 'row',

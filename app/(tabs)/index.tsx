@@ -11,6 +11,7 @@ import { StyleProfileModal } from '@/components/style-profile-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL } from '@/config/api';
+import { friendlyErrorMessage } from '@/config/api-error';
 import { apiFetch } from '@/config/api-fetch';
 import { Fonts } from '@/constants/theme';
 import { useAuthedPhotoSource } from '@/hooks/use-authed-photo-source';
@@ -129,7 +130,7 @@ export default function GenerateScreen() {
         params.set('style_profile', styleProfile);
       }
       const response = await apiFetch(`${API_BASE_URL}/outfit/today?${params}`);
-      if (!response.ok) throw new Error(`Server responded ${response.status}`);
+      if (!response.ok) throw new Error(await friendlyErrorMessage(response));
       const data = await response.json();
       if (!isCompleteOutfit(data)) throw new Error('Received an incomplete outfit.');
       setOutfit(data);
@@ -171,7 +172,7 @@ export default function GenerateScreen() {
         await fetchOutfit();
         return;
       }
-      if (!response.ok) throw new Error(`Server responded ${response.status}`);
+      if (!response.ok) throw new Error(await friendlyErrorMessage(response));
       const data = await response.json();
       if (!isCompleteOutfit(data)) throw new Error('Received an incomplete outfit.');
       setOutfit(data);

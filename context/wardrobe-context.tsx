@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
 import { API_BASE_URL } from '@/config/api';
+import { friendlyErrorMessage } from '@/config/api-error';
 import { apiFetch } from '@/config/api-fetch';
 import { useToast } from '@/context/toast-context';
 
@@ -41,7 +42,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const response = await apiFetch(`${API_BASE_URL}/items`);
-      if (!response.ok) throw new Error(`Server responded ${response.status}`);
+      if (!response.ok) throw new Error(await friendlyErrorMessage(response));
       const data: WardrobeItem[] = await response.json();
       setItems(data);
     } catch (err) {
@@ -62,7 +63,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ item_ids: [itemId] }),
         });
-        if (!response.ok) throw new Error(`Server responded ${response.status}`);
+        if (!response.ok) throw new Error(await friendlyErrorMessage(response));
         showToast('Added to laundry');
       } catch {
         setItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, available: true } : item)));
@@ -81,7 +82,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ item_ids: itemIds }),
         });
-        if (!response.ok) throw new Error(`Server responded ${response.status}`);
+        if (!response.ok) throw new Error(await friendlyErrorMessage(response));
         showToast(itemIds.length === 1 ? 'Finished laundry' : `Finished laundry (${itemIds.length} items)`);
       } catch {
         setItems((prev) => prev.map((item) => (itemIds.includes(item.id) ? { ...item, available: false } : item)));
@@ -107,7 +108,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fields),
         });
-        if (!response.ok) throw new Error(`Server responded ${response.status}`);
+        if (!response.ok) throw new Error(await friendlyErrorMessage(response));
         showToast('Item updated');
       } catch {
         if (previous) {
@@ -131,7 +132,7 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
       });
       try {
         const response = await apiFetch(`${API_BASE_URL}/items/${itemId}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error(`Server responded ${response.status}`);
+        if (!response.ok) throw new Error(await friendlyErrorMessage(response));
         showToast('Item deleted');
       } catch {
         if (removed) {
