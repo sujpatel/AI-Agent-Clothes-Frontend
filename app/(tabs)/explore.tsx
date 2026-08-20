@@ -1,6 +1,6 @@
+import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, Layout, ZoomOut } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EditItemModal } from '@/components/edit-item-modal';
@@ -58,7 +58,9 @@ export default function GalleryScreen() {
         {error && !loading && (
           <ThemedView style={styles.errorRow}>
             <ThemedText style={{ color: mutedColor }}>{error}</ThemedText>
-            <Pressable style={[styles.button, styles.errorButton, { backgroundColor: textColor }]} onPress={fetchItems}>
+            <Pressable
+              style={[styles.button, styles.errorButton, { backgroundColor: textColor }]}
+              onPress={() => fetchItems()}>
               <ThemedText style={[styles.buttonText, { color: bgColor }]}>RETRY</ThemedText>
             </Pressable>
           </ThemedView>
@@ -110,6 +112,23 @@ export default function GalleryScreen() {
                   <View style={styles.grid}>
                     {filteredItems.map((item) => {
                       const inLaundry = item.available === false;
+
+                      // Still uploading — render from the on-device file and
+                      // hide the edit/delete controls until it has a real id.
+                      if (item.pending) {
+                        return (
+                          <ThemedView key={item.id} style={styles.card}>
+                            <ThemedView style={[styles.swatch, { backgroundColor: bgColor, borderColor: lineColor }]}>
+                              <Image source={{ uri: item.localUri }} style={styles.photo} contentFit="cover" />
+                              <ThemedView style={styles.pendingOverlay}>
+                                <ActivityIndicator size="small" color="#fff" />
+                              </ThemedView>
+                            </ThemedView>
+                            <ThemedText style={[styles.statusTag, { color: mutedColor }]}>SAVING…</ThemedText>
+                          </ThemedView>
+                        );
+                      }
+
                       return (
                         <ThemedView key={item.id} style={styles.card}>
                           <Pressable onPress={() => !inLaundry && addToLaundry(item.id)} disabled={inLaundry}>
@@ -251,6 +270,12 @@ const styles = StyleSheet.create({
   photo: {
     width: '100%',
     aspectRatio: 1,
+  },
+  pendingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(23,20,15,0.45)',
   },
   statusTag: {
     fontFamily: Fonts.mono,

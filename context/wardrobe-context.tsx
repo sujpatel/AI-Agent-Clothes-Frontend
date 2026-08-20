@@ -14,6 +14,11 @@ export type WardrobeItem = {
   warmth: number;
   description: string;
   available?: boolean;
+  // Set only while a freshly-taken photo is still being tagged and saved.
+  // `localUri` lets the grid show the photo straight off the device instead
+  // of waiting on the server round-trip.
+  pending?: boolean;
+  localUri?: string;
 };
 
 export type EditableFields = Partial<Pick<WardrobeItem, 'category' | 'color' | 'pattern' | 'formality' | 'warmth'>>;
@@ -22,7 +27,9 @@ type WardrobeContextValue = {
   items: WardrobeItem[];
   loading: boolean;
   error: string | null;
-  fetchItems: () => Promise<void>;
+  fetchItems: (options?: { silent?: boolean }) => Promise<void>;
+  addPendingItem: (localId: string, localUri: string) => void;
+  resolvePendingItem: (localId: string, saved: WardrobeItem | null) => void;
   addToLaundry: (itemId: string) => Promise<void>;
   finishLaundry: (itemIds: string[]) => Promise<void>;
   updateItem: (itemId: string, fields: EditableFields) => Promise<void>;
@@ -37,19 +44,54 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // `silent` skips the loading/error UI — used for background refreshes
+  // (e.g. right after a photo uploads) so the grid updates in place instead
+  // of flashing a spinner over content that's already on screen.
+  const fetchItems = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const response = await apiFetch(`${API_BASE_URL}/items`);
       if (!response.ok) throw new Error(await friendlyErrorMessage(response));
       const data: WardrobeItem[] = await response.json();
       setItems(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      if (!silent) setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  }, []);
+
+  // Shows a just-taken photo in the grid immediately, before the server has
+  // finished tagging and storing it. The placeholder renders from the local
+  // file, so there's no wait for the round-trip.
+  const addPendingItem = useCallback((localId: string, localUri: string) => {
+    setItems((prev) => [
+      {
+        id: localId,
+        localUri,
+        pending: true,
+        category: '',
+        color: '',
+        pattern: '',
+        formality: 0,
+        warmth: 0,
+        description: '',
+        available: true,
+      },
+      ...prev,
+    ]);
+  }, []);
+
+  // Swaps the placeholder for the real saved item once the upload finishes,
+  // or drops it if the upload failed.
+  const resolvePendingItem = useCallback((localId: string, saved: WardrobeItem | null) => {
+    setItems((prev) => {
+      if (!saved) return prev.filter((item) => item.id !== localId);
+      return prev.map((item) => (item.id === localId ? saved : item));
+    });
   }, []);
 
   const addToLaundry = useCallback(
@@ -160,7 +202,18 @@ export function WardrobeProvider({ children }: { children: ReactNode }) {
 
   return (
     <WardrobeContext.Provider
-      value={{ items, loading, error, fetchItems, addToLaundry, finishLaundry, updateItem, deleteItem }}>
+      value={{
+        items,
+        loading,
+        error,
+        fetchItems,
+        addPendingItem,
+        resolvePendingItem,
+        addToLaundry,
+        finishLaundry,
+        updateItem,
+        deleteItem,
+      }}>
       {children}
     </WardrobeContext.Provider>
   );

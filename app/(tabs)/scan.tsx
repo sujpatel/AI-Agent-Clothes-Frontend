@@ -36,7 +36,7 @@ type CapturedPhoto = {
 };
 
 export default function ScanScreen() {
-  const { fetchItems } = useWardrobe();
+  const { fetchItems, addPendingItem, resolvePendingItem } = useWardrobe();
   const photoSource = useAuthedPhotoSourceBuilder();
   const textColor = useThemeColor({}, 'text');
   const bgColor = useThemeColor({}, 'background');
@@ -79,6 +79,18 @@ export default function ScanScreen() {
       if (!response.ok) throw new Error(await friendlyErrorMessage(response));
       const data: TaggedItem = await response.json();
       setCapturedPhotos((prev) => prev.map((p) => (p.key === key ? { ...p, status: 'done', item: data } : p)));
+      // Swap the optimistic placeholder for the real saved item — no refetch,
+      // so the grid updates in place without a network round-trip.
+      resolvePendingItem(key, {
+        id: data.item_id,
+        category: data.category,
+        color: data.color,
+        pattern: data.pattern,
+        formality: data.formality,
+        warmth: data.warmth,
+        description: data.description,
+        available: true,
+      });
     } catch (err) {
       setCapturedPhotos((prev) =>
         prev.map((p) =>
@@ -87,8 +99,10 @@ export default function ScanScreen() {
             : p
         )
       );
+      // Drop the placeholder so a failed upload doesn't linger in the grid.
+      resolvePendingItem(key, null);
     }
-  }, []);
+  }, [resolvePendingItem]);
 
   const captureOnePhoto = useCallback(async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -108,11 +122,15 @@ export default function ScanScreen() {
     const photo = result.assets[0];
     const key = `${Date.now()}-${Math.random()}`;
     setCapturedPhotos((prev) => [...prev, { key, uri: photo.uri, status: 'uploading' }]);
+    // Show it in the wardrobe right away, rendered from the local file, so
+    // the photo appears the moment it's taken rather than after Gemini
+    // tagging and the storage upload finish.
+    addPendingItem(key, photo.uri);
     // Fire-and-forget — the camera reopens immediately rather than waiting
     // for this to finish, so capturing stays fast and continuous.
     uploadOnePhoto(key, photo.uri, photo.fileName ?? undefined, photo.mimeType ?? undefined);
     return true;
-  }, [uploadOnePhoto]);
+  }, [uploadOnePhoto, addPendingItem]);
 
   const startCapturing = useCallback(async () => {
     setReviewingCaptures(false);
@@ -126,15 +144,23 @@ export default function ScanScreen() {
     setReviewingCaptures(true);
   }, [captureOnePhoto]);
 
-  const removeCapturedPhoto = useCallback(async (key: string) => {
-    setCapturedPhotos((prev) => {
-      const target = prev.find((p) => p.key === key);
-      if (target?.status === 'done' && target.item) {
-        apiFetch(`${API_BASE_URL}/items/${target.item.item_id}`, { method: 'DELETE' }).catch(() => {});
-      }
-      return prev.filter((p) => p.key !== key);
-    });
-  }, []);
+  const removeCapturedPhoto = useCallback(
+    async (key: string) => {
+      setCapturedPhotos((prev) => {
+        const target = prev.find((p) => p.key === key);
+        if (target?.status === 'done' && target.item) {
+          // Already saved to the wardrobe, so deleting it here has to
+          // refresh the shared list too — otherwise the removed item keeps
+          // showing on the Wardrobe tab until the app restarts.
+          apiFetch(`${API_BASE_URL}/items/${target.item.item_id}`, { method: 'DELETE' })
+            .then(() => fetchItems({ silent: true }))
+            .catch(() => {});
+        }
+        return prev.filter((p) => p.key !== key);
+      });
+    },
+    [fetchItems]
+  );
 
   const retryCapturedPhoto = useCallback(
     (key: string) => {

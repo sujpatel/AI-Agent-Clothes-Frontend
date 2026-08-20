@@ -72,7 +72,9 @@ export default function LaundryScreen() {
         {error && !loading && (
           <ThemedView style={styles.errorRow}>
             <ThemedText style={{ color: mutedColor }}>{error}</ThemedText>
-            <Pressable style={[styles.button, styles.errorButton, { backgroundColor: textColor }]} onPress={fetchItems}>
+            <Pressable
+              style={[styles.button, styles.errorButton, { backgroundColor: textColor }]}
+              onPress={() => fetchItems()}>
               <ThemedText style={[styles.buttonText, { color: bgColor }]}>RETRY</ThemedText>
             </Pressable>
           </ThemedView>
